@@ -4,11 +4,11 @@
 #include <DallasTemperature.h>
 
 // Wi-Fi
-const char* ssid = "aec10";
-const char* password = "4Tyv!/.s";
+const char* ssid = "";
+const char* password = "";
 
 // Telegram
-String botToken = "8715903375:AAH9c8TzVckJjFw_IEQiwo9qX5jkEcsM_Ng";
+String botToken = "";
 String chatID = "6148205976";
 
 // DS18B20
