@@ -1,0 +1,83 @@
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+// Wi-Fi
+const char* ssid = "aec10";
+const char* password = "4Tyv!/.s";
+
+// Telegram
+String botToken = "8715903375:AAH9c8TzVckJjFw_IEQiwo9qX5jkEcsM_Ng";
+String chatID = "6148205976";
+
+// DS18B20
+#define ONE_WIRE_BUS 4   // GPIO4
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&oneWire);
+
+unsigned long lastTime = 0;
+const long interval = 5000; // 5 segundos
+
+void setup() {
+
+  Serial.begin(115200);
+
+  WiFi.begin(ssid, password);
+
+  Serial.print("Conectando");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("\nWiFi conectado");
+
+  sensors.begin();
+
+  enviarMensagem("ESP32 iniciado com DS18B20");
+}
+
+void loop() {
+
+  if (millis() - lastTime >= interval) {
+    lastTime = millis();
+
+    sensors.requestTemperatures();
+    float tempC = sensors.getTempCByIndex(0);
+
+    Serial.print("Temperatura: ");
+    Serial.println(tempC);
+
+    String msg = "Temperatura: " + String(tempC) + " C";
+
+    enviarMensagem(msg);
+  }
+}
+
+void enviarMensagem(String msg) {
+
+  HTTPClient http;
+
+  String url = "https://api.telegram.org/bot";
+  url += botToken;
+  url += "/sendMessage?chat_id=";
+  url += chatID;
+  url += "&text=";
+
+  // simples encoding
+  for (int i = 0; i < msg.length(); i++) {
+    if (msg[i] == ' ') url += "+";
+    else url += msg[i];
+  }
+
+  http.begin(url);
+
+  int httpCode = http.GET();
+
+  Serial.print("HTTP: ");
+  Serial.println(httpCode);
+
+  http.end();
+}
