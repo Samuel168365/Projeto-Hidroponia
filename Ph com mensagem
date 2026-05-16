@@ -1,0 +1,93 @@
+#include <WiFi.h>
+#include <HTTPClient.h>
+
+// Wi-Fi
+const char* ssid = "aec10";
+const char* password = "4Tyv!/";
+
+// Telegram
+String botToken = "";
+String chatID = "6148205976";
+
+// pH sensor
+#define PH_PIN 4   // ajuste para seu GPIO ADC
+
+unsigned long lastTime = 0;
+const long interval = 5000; // 5 segundos
+
+// calibração simples (ajuste com seus testes)
+float Vref = 2.27;  // água da torneira
+float scale = 5.7;  // ajuste fino depois
+
+void setup() {
+
+  Serial.begin(115200);
+
+  WiFi.begin(ssid, password);
+
+  Serial.print("Conectando");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("\nWiFi conectado");
+
+  enviarMensagem("ESP32 iniciado com sensor de pH");
+}
+
+void loop() {
+
+  if (millis() - lastTime >= interval) {
+    lastTime = millis();
+
+    float V = readVoltage();
+    float ph = 6.0 + (Vref - V) * scale;
+
+    Serial.print("pH: ");
+    Serial.println(ph);
+
+    String msg = "pH: " + String(ph, 2);
+
+    enviarMensagem(msg);
+  }
+}
+
+float readVoltage() {
+
+  int sum = 0;
+
+  for (int i = 0; i < 20; i++) {
+    sum += analogRead(PH_PIN);
+    delay(5);
+  }
+
+  float adc = sum / 20.0;
+  return adc * (3.3 / 4095.0);
+}
+
+void enviarMensagem(String msg) {
+
+  HTTPClient http;
+
+  String url = "https://api.telegram.org/bot";
+  url += botToken;
+  url += "/sendMessage?chat_id=";
+  url += chatID;
+  url += "&text=";
+
+  for (int i = 0; i < msg.length(); i++) {
+    if (msg[i] == ' ') url += "+";
+    else url += msg[i];
+  }
+
+  http.begin(url);
+
+  int httpCode = http.GET();
+
+  Serial.print("HTTP: ");
+  Serial.println(httpCode);
+
+  http.end();
+}
