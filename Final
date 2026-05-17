@@ -1,0 +1,157 @@
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>   // ✅ necessário para HTTPS no ESP32
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+// ================= WIFI =================
+const char* ssid = "";
+const char* password = "";
+
+// ================= TELEGRAM =================
+String botToken = "";
+String chatID = "6148205976";
+
+// ================= pH =================
+#define PH_PIN 4
+
+float Vref = 2.27;
+float scale = 5.7;
+float offset = -0.7;  // ✅ ajustado de 0.3 para 0.31
+
+// ================= TEMPERATURA =================
+#define ONE_WIRE_BUS 5
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&oneWire);
+
+// ================= TIMERS =================
+unsigned long lastSend = 0;
+const long sendInterval = 10000;
+
+// ================= LIMITES HIDROPONIA =================
+float PH_MIN = 5.5;
+float PH_MAX = 6.5;
+
+float TEMP_MIN = 18.0;
+float TEMP_MAX = 28.0;
+
+// ================= ALERTA =================
+bool alertSent = false;
+
+// ================= SETUP =================
+void setup() {
+  Serial.begin(115200);
+
+  WiFi.begin(ssid, password);
+  Serial.print("Conectando");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("\nWiFi conectado");
+  sensors.begin();
+  sendMessage("Sistema hidroponia iniciado");
+}
+
+// ================= LOOP =================
+void loop() {
+  float V = readVoltage();
+  float ph = 7.0 + (Vref - V) * scale + offset;
+
+  sensors.requestTemperatures();
+  float tempC = sensors.getTempCByIndex(0);
+
+  Serial.print("pH: ");
+  Serial.print(ph);
+  Serial.print(" | Temp: ");
+  Serial.println(tempC);
+
+  checkAlerts(ph, tempC);
+
+  if (millis() - lastSend > sendInterval) {
+    lastSend = millis();
+    sendStatus(ph, tempC);
+  }
+
+  delay(1000);
+}
+
+// ================= ENVIO NORMAL =================
+void sendStatus(float ph, float tempC) {
+  String msg = "STATUS HIDROPONIA\n";
+  msg += "pH: " + String(ph, 2) + "\n";
+  msg += "Temp: " + String(tempC, 1) + " C";
+  sendMessage(msg);
+}
+
+// ================= ALERTAS =================
+void checkAlerts(float ph, float tempC) {
+  bool phOut   = (ph < PH_MIN || ph > PH_MAX);
+  bool tempOut = (tempC < TEMP_MIN || tempC > TEMP_MAX);
+
+  if (phOut || tempOut) {
+    if (!alertSent) {
+      String msg = "ALERTA HIDROPONIA\n";
+
+      if (phOut)
+        msg += "pH fora da faixa!\n";
+
+      if (tempOut)
+        msg += "Temperatura fora da faixa!\n";
+
+      msg += "\npH: " + String(ph, 2);
+      msg += "\nTemp: " + String(tempC, 1) + " C";
+
+      sendMessage(msg);
+      alertSent = true;
+    }
+  } else {
+    alertSent = false;
+  }
+}
+
+// ================= LEITURA pH =================
+float readVoltage() {
+  int sum = 0;
+
+  for (int i = 0; i < 20; i++) {
+    sum += analogRead(PH_PIN);
+    delay(5);
+  }
+
+  float adc = sum / 20.0;
+  return adc * (3.3 / 4095.0);
+}
+
+// ================= TELEGRAM =================
+void sendMessage(String msg) {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi desconectado, mensagem nao enviada");
+    return;
+  }
+
+  msg.replace("\n", "%0A");
+  msg.replace(" ",  "+");
+  msg.replace("!",  "%21");
+  msg.replace(":",  "%3A");
+
+  String url = "https://api.telegram.org/bot";
+  url += botToken;
+  url += "/sendMessage?chat_id=";
+  url += chatID;
+  url += "&text=";
+  url += msg;
+
+  WiFiClientSecure client;          // ✅ client seguro para HTTPS
+  client.setInsecure();             // ✅ sem certificado (mais simples, funciona bem)
+
+  HTTPClient http;
+  http.begin(client, url);          // ✅ begin com client seguro
+  int code = http.GET();
+  http.end();
+
+  Serial.print("HTTP CODE: ");
+  Serial.println(code);
+}
