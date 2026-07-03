@@ -5,19 +5,19 @@
 #include <DallasTemperature.h>
 
 // ================= WIFI =================
-const char* ssid = "iPhone de Bruno";
-const char* password = "86B6241D";
+const char* ssid = "aec10";
+const char* password = "4Tyv!/.s";
 
 // ================= TELEGRAM =================
-String botToken = "";
-String chatID = "8565487777";
+String botToken = "8715903375:AAH9c8TzVckJjFw_IEQiwo9qX5jkEcsM_Ng";
+String chatID = "6148205976";
 
 // ================= pH =================
 #define PH_PIN 4
 
 float Vref = 2.27;
 float scale = 5.7;
-float offset = -0.7;  // ✅ ajustado de 0.3 para 0.31
+float offset = 0.6;  // ✅ ajustado de 0.3 para 0.31
 
 // ================= TEMPERATURA =================
 #define ONE_WIRE_BUS 5
