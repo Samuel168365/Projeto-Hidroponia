@@ -10,7 +10,7 @@ const char* ssid = "aec10";
 const char* password = "4Tyv!/.s";
 
 // ================= TELEGRAM =================
-String botToken = "8715903375:AAH9c8TzVckJjFw_IEQiwo9qX5jkEcsM_Ng";
+String botToken = "8829337226:AAECshz8gyNS_gbrNTIuoU1LwKoJRgA4n8M";
 String chatID = "6148205976";
 
 // ================= pH =================
