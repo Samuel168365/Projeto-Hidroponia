@@ -6,7 +6,7 @@
 #include "driver/twai.h"        // ✅ driver CAN (TWAI) nativo do ESP32
 
 // ================= WIFI =================
-const char* ssid = "aec10";
+const char* ssid = "";
 const char* password = "4Tyv!/.s";
 
 // ================= TELEGRAM =================
