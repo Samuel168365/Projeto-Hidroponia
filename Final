@@ -1,13 +1,13 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
-#include <WiFiClientSecure.h>   // ✅ necessário para HTTPS no ESP32
+#include <WiFiClientSecure.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
-#include "driver/twai.h"        // ✅ driver CAN (TWAI) nativo do ESP32
+#include "driver/twai.h"
 
 // ================= WIFI =================
 const char* ssid = "";
-const char* password = "4Tyv!/.s";
+const char* password = "";
 
 // ================= TELEGRAM =================
 String botToken = "";
@@ -18,7 +18,7 @@ String chatID = "6148205976";
 
 float Vref = 2.27;
 float scale = 5.7;
-float offset = 0.6;  // ✅ ajustado de 0.3 para 0.31
+float offset = 0.6;
 
 // ================= TEMPERATURA =================
 #define ONE_WIRE_BUS 5
@@ -26,56 +26,45 @@ OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 
 // ================= CAN (TWAI) - ESP32-S3 =================
-// Módulo transceptor de 6 pinos (ex: SN65HVD230)
-// Pinagem do módulo -> ESP32-S3
-//   VCC  -> 3.3V
-//   GND  -> GND
-//   TXD  -> GPIO17
-//   RXD  -> GPIO18
-//   CANH -> barramento CAN (linha H)
-//   CANL -> barramento CAN (linha L)
-// Obs: GPIO19/20 são reservados para USB nativo no S3, e
-// GPIO0/3/45/46 são pinos de strapping — por isso usamos 17/18.
-// Resistor de terminação de 120 ohms em cada ponta do barramento.
 #define CAN_TX_PIN GPIO_NUM_17
 #define CAN_RX_PIN GPIO_NUM_18
-#define CAN_MSG_ID 0x100   // ID da mensagem de status pH/Temp
+#define CAN_MSG_ID 0x100
 
 bool canReady = false;
+
+// ⚠️ MODO DE TESTE: true = sozinho (NO_ACK) | false = com outro nó (NORMAL)
+#define CAN_TEST_MODE_SOLO true
 
 // ================= TIMERS =================
 unsigned long lastSend = 0;
 const long sendInterval = 5000;
 
+unsigned long lastCANStatus = 0;
+const long canStatusInterval = 5000;
+
 // ================= LIMITES HIDROPONIA =================
 float PH_MIN = 5.5;
 float PH_MAX = 6.5;
-
 float TEMP_MIN = 18.0;
 float TEMP_MAX = 28.0;
 
 // ================= ALERTA =================
 bool alertSent = false;
 
-// ================= SETUP =================
 void setup() {
   Serial.begin(115200);
-
   WiFi.begin(ssid, password);
   Serial.print("Conectando");
-
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-
   Serial.println("\nWiFi conectado");
   sensors.begin();
   setupCAN();
   sendMessage("Sistema hidroponia iniciado");
 }
 
-// ================= LOOP =================
 void loop() {
   float V = readVoltage();
   float ph = 7.0 + (Vref - V) * scale + offset;
@@ -89,7 +78,7 @@ void loop() {
   Serial.println(tempC);
 
   checkAlerts(ph, tempC);
-  checkCANReceive();   // verifica se chegou algum comando pelo barramento CAN
+  checkCANReceive();
 
   if (millis() - lastSend > sendInterval) {
     lastSend = millis();
@@ -97,10 +86,14 @@ void loop() {
     sendCANData(ph, tempC);
   }
 
+  if (millis() - lastCANStatus > canStatusInterval) {
+    lastCANStatus = millis();
+    printCANStatus();
+  }
+
   delay(1000);
 }
 
-// ================= ENVIO NORMAL =================
 void sendStatus(float ph, float tempC) {
   bool phOut   = (ph < PH_MIN || ph > PH_MAX);
   bool tempOut = (tempC < TEMP_MIN || tempC > TEMP_MAX);
@@ -109,19 +102,15 @@ void sendStatus(float ph, float tempC) {
   msg += "pH: " + String(ph, 2) + "\n";
   msg += "Temp: " + String(tempC, 1) + " C";
 
-  // ✅ Adiciona aviso de fora de faixa dentro da mensagem normal
   if (phOut || tempOut) {
     msg += "\n\n⚠ FORA DA FAIXA:";
-    if (phOut)
-      msg += "\n- pH fora da faixa!";
-    if (tempOut)
-      msg += "\n- Temperatura fora da faixa!";
+    if (phOut) msg += "\n- pH fora da faixa!";
+    if (tempOut) msg += "\n- Temperatura fora da faixa!";
   }
 
   sendMessage(msg);
 }
 
-// ================= ALERTAS =================
 void checkAlerts(float ph, float tempC) {
   bool phOut   = (ph < PH_MIN || ph > PH_MAX);
   bool tempOut = (tempC < TEMP_MIN || tempC > TEMP_MAX);
@@ -129,16 +118,10 @@ void checkAlerts(float ph, float tempC) {
   if (phOut || tempOut) {
     if (!alertSent) {
       String msg = "ALERTA HIDROPONIA\n";
-
-      if (phOut)
-        msg += "pH fora da faixa!\n";
-
-      if (tempOut)
-        msg += "Temperatura fora da faixa!\n";
-
+      if (phOut) msg += "pH fora da faixa!\n";
+      if (tempOut) msg += "Temperatura fora da faixa!\n";
       msg += "\npH: " + String(ph, 2);
       msg += "\nTemp: " + String(tempC, 1) + " C";
-
       sendMessage(msg);
       alertSent = true;
     }
@@ -147,20 +130,16 @@ void checkAlerts(float ph, float tempC) {
   }
 }
 
-// ================= LEITURA pH =================
 float readVoltage() {
   int sum = 0;
-
   for (int i = 0; i < 20; i++) {
     sum += analogRead(PH_PIN);
     delay(5);
   }
-
   float adc = sum / 20.0;
   return adc * (3.3 / 4095.0);
 }
 
-// ================= TELEGRAM =================
 void sendMessage(String msg) {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi desconectado, mensagem nao enviada");
@@ -179,11 +158,11 @@ void sendMessage(String msg) {
   url += "&text=";
   url += msg;
 
-  WiFiClientSecure client;          // ✅ client seguro para HTTPS
-  client.setInsecure();             // ✅ sem certificado (mais simples, funciona bem)
+  WiFiClientSecure client;
+  client.setInsecure();
 
   HTTPClient http;
-  http.begin(client, url);          // ✅ begin com client seguro
+  http.begin(client, url);
   int code = http.GET();
   http.end();
 
@@ -191,11 +170,12 @@ void sendMessage(String msg) {
   Serial.println(code);
 }
 
-// ================= CAN (TWAI) - SETUP =================
 void setupCAN() {
+  twai_mode_t mode = CAN_TEST_MODE_SOLO ? TWAI_MODE_NO_ACK : TWAI_MODE_NORMAL;
+
   twai_general_config_t g_config =
-      TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, TWAI_MODE_NORMAL);
-  twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();  // 500 kbps
+      TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, mode);
+  twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
   twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
   if (twai_driver_install(&g_config, &t_config, &f_config) != ESP_OK) {
@@ -209,12 +189,14 @@ void setupCAN() {
   }
 
   canReady = true;
-  Serial.println("CAN (TWAI) iniciado a 500 kbps");
+
+  if (CAN_TEST_MODE_SOLO) {
+    Serial.println("CAN (TWAI) iniciado a 500 kbps - MODO TESTE SOLO (NO_ACK)");
+  } else {
+    Serial.println("CAN (TWAI) iniciado a 500 kbps - MODO NORMAL");
+  }
 }
 
-// ================= CAN (TWAI) - ENVIO =================
-// Envia pH e temperatura em uma mensagem CAN de 4 bytes:
-// [pH_high][pH_low][temp_high][temp_low], valores * 100 (int16)
 void sendCANData(float ph, float tempC) {
   if (!canReady) return;
 
@@ -223,7 +205,7 @@ void sendCANData(float ph, float tempC) {
 
   twai_message_t message;
   message.identifier = CAN_MSG_ID;
-  message.extd = 0;               // ID padrão (11 bits)
+  message.extd = 0;
   message.rtr = 0;
   message.data_length_code = 4;
   message.data[0] = (phInt >> 8) & 0xFF;
@@ -238,9 +220,6 @@ void sendCANData(float ph, float tempC) {
   }
 }
 
-// ================= CAN (TWAI) - RECEPCAO =================
-// Verifica, sem bloquear, se chegou alguma mensagem no barramento CAN.
-// Pode ser usada para receber comandos de outro nó (ex: mudar limites).
 void checkCANReceive() {
   if (!canReady) return;
 
@@ -254,10 +233,43 @@ void checkCANReceive() {
       Serial.print(" ");
     }
     Serial.println();
+  }
+}
 
-    // Exemplo de uso: se receber ID 0x200, primeiro byte = novo PH_MAX
-    // if (message.identifier == 0x200) {
-    //   PH_MAX = message.data[0] / 10.0;
-    // }
+void printCANStatus() {
+  if (!canReady) return;
+
+  twai_status_info_t status;
+  if (twai_get_status_info(&status) == ESP_OK) {
+    Serial.print("CAN status -> Estado: ");
+    switch (status.state) {
+      case TWAI_STATE_STOPPED:   Serial.print("PARADO"); break;
+      case TWAI_STATE_RUNNING:   Serial.print("RODANDO"); break;
+      case TWAI_STATE_BUS_OFF:   Serial.print("BUS_OFF (erro critico)"); break;
+      case TWAI_STATE_RECOVERING: Serial.print("RECUPERANDO"); break;
+      default: Serial.print("DESCONHECIDO"); break;
+    }
+    Serial.print(" | TX errors: ");
+    Serial.print(status.tx_error_counter);
+    Serial.print(" | RX errors: ");
+    Serial.print(status.rx_error_counter);
+    Serial.print(" | TX falhas: ");
+    Serial.print(status.tx_failed_count);
+    Serial.print(" | Msgs perdidas: ");
+    Serial.println(status.rx_missed_count);
+
+    if (status.state == TWAI_STATE_BUS_OFF) {
+      Serial.println("Tentando recuperar do BUS_OFF...");
+      twai_initiate_recovery();
+    }
+
+    if (status.state == TWAI_STATE_STOPPED) {
+      Serial.println("Controlador parado - reiniciando com twai_start()...");
+      if (twai_start() == ESP_OK) {
+        Serial.println("CAN reiniciado com sucesso.");
+      } else {
+        Serial.println("Falha ao reiniciar o CAN.");
+      }
+    }
   }
 }
