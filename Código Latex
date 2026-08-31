@@ -1,0 +1,601 @@
+\documentclass[12pt, a4paper]{article} 
+\usepackage[utf8]{inputenc} 
+\usepackage[T1]{fontenc} 
+\usepackage[brazil]{babel} 
+\usepackage{geometry} 
+\usepackage{setspace} 
+\usepackage{booktabs} 
+\usepackage{longtable} 
+\usepackage[hidelinks]{hyperref} 
+\usepackage{amsmath} 
+\usepackage{graphicx} 
+\usepackage{listings} 
+\usepackage{xcolor} 
+\usepackage{pgfplots} 
+\pgfplotsset{compat=1.18}
+\usepackage{circuitikz}
+\sloppy 
+\geometry{ 
+    a4paper, 
+    top=2.5cm, bottom=2.5cm, 
+    left=3cm, right=3cm 
+} 
+\onehalfspacing 
+
+ 
+% ------------------------------------------------------- 
+% Configuração do listings para código Arduino/C++ 
+% ------------------------------------------------------- 
+\lstdefinestyle{arduino}{ 
+    language=C++, 
+    basicstyle=\ttfamily\small, 
+    keywordstyle=\color{blue}\bfseries, 
+    commentstyle=\color{gray}\itshape, 
+    stringstyle=\color{red!70!black}, 
+    numberstyle=\tiny\color{gray}, 
+    numbers=left, 
+    stepnumber=1, 
+    numbersep=8pt, 
+    frame=single, 
+    breaklines=true, 
+    breakatwhitespace=true, 
+    tabsize=2, 
+    showstringspaces=false, 
+    captionpos=b, 
+    morekeywords={Serial, sensors, OneWire, DallasTemperature, 
+                  pinMode, digitalWrite, digitalRead, delay, 
+                  millis, println, print, begin, requestTemperatures, 
+                  getTempCByIndex, getDeviceCount, DEVICE\_DISCONNECTED\_C}, 
+} 
+ 
+\begin{document} 
+ 
+% ------------------------------------------------------- 
+% CAPA 
+% ------------------------------------------------------- 
+\begin{titlepage} 
+    \begin{center} 
+ 
+        \includegraphics[width=6cm]{logo_ibeac.png} 
+ 
+        \vspace{1.5cm} 
+ 
+        \Large 
+        \textbf{PROJETO IBEAC} 
+ 
+        \vspace{1.5cm} 
+ 
+        \normalsize 
+        Bruno Zimmermann Russo Ferreira \\ 
+        Enzo Kendi Shinzato \\ 
+        Samuel Bezerra Tavares \\ 
+        Pedro Berger Moreira Marques 
+ 
+        \vspace{3.5cm} 
+ 
+        \huge 
+        \textbf{Sistema de Monitorização Agrícola de Baixo Custo para Hidroponia} 
+ 
+        \vspace{1cm} 
+        \Large 
+        Entrega Projeto 2 
+ 
+        \vfill 
+ 
+        \normalsize 
+        \textbf{São Paulo} \\ 
+        \textbf{2026} 
+ 
+    \end{center} 
+\end{titlepage} 
+ 
+% ------------------------------------------------------- 
+% SUMÁRIO 
+% ------------------------------------------------------- 
+\tableofcontents 
+\newpage 
+ 
+% ------------------------------------------------------- 
+% INTRODUÇÃO 
+% ------------------------------------------------------- 
+\section{Introdução} 
+O presente documento integra a segunda entrega do Projeto IBEAC, cujo objetivo central é 
+o desenvolvimento de um sistema de monitorização agrícola de baixo custo voltado para 
+cultivos hidropônicos. A hidroponia, técnica que substitui o solo por soluções nutritivas 
+aquosas, exige controle rigoroso de parâmetros físico-químicos --- em especial temperatura 
+e pH da solução nutritiva ---, pois variações fora da faixa ideal comprometem diretamente o 
+desenvolvimento das plantas e a produtividade do cultivo. 
+Nessa etapa do projeto, o foco recai sobre a aquisição dos sinais já condicionados por meio 
+de sistema embarcado. Para o sensor de temperatura DS18B20, a comunicação se dá via 
+interface digital 1-Wire, dispensando conversão analógico-digital externa. Já o sensor de pH 
+tipo caneta com saída BNC fornece um sinal analógico de baixa tensão que, após 
+condicionamento, é digitalizado pelo conversor A/D interno do microcontrolador. O firmware 
+desenvolvido é responsável por coordenar a leitura simultânea de ambos os sensores, 
+definir a taxa de amostragem adequada a cada grandeza e realizar o armazenamento e/ou 
+transmissão dos dados coletados para análise posterior. 
+A caracterização individual de cada sensor, bem como a integração dos dois canais de 
+aquisição em um único sistema embarcado, são descritas nas seções seguintes, permitindo 
+avaliar a confiabilidade e a adequação da solução proposta às exigências de um sistema de 
+monitorização hidropônica de baixo custo. 
+% ------------------------------------------------------- 
+% SENSOR DE TEMPERATURA 
+% ------------------------------------------------------- 
+\section{Sensor de Temperatura DS18B20: Caracterização e Aquisição de Sinal} 
+\subsection{Caracterização do sensor} 
+O DS18B20 é um sensor de temperatura digital de um fio (\textit{1-Wire}), fabricado pela 
+Maxim Integrated, capaz de medir temperaturas na faixa de $-55\,^{\circ}$C a 
+$+125\,^{\circ}$C com resolução configurável de 9 a 12 bits. Em resolução máxima de 12 
+bits, a menor variação detectável é de $0{,}0625\,^{\circ}$C, com precisão de 
+$\pm0{,}5\,^{\circ}$C na faixa de $-10\,^{\circ}$C a $+85\,^{\circ}$C. Cada unidade possui 
+um código de identificação de 64 bits gravado em fábrica, permitindo o endereçamento de 
+múltiplos sensores em um único barramento. 
+Para fins de caracterização, o sensor foi submetido a diferentes níveis de temperatura 
+gerados por variação de amperagem em um resistor de aquecimento, e as leituras do 
+DS18B20 foram comparadas com as de um multímetro de referência. A 
+Figura~\ref{fig:curvas_temp} apresenta as duas curvas sobrepostas em função da corrente 
+aplicada. 
+\begin{figure}[h] 
+\centering 
+    \begin{tikzpicture} 
+        \begin{axis}[ 
+            width=13cm, 
+            height=8cm, 
+            xlabel={Amperagem (A)}, 
+            ylabel={Temperatura ($^{\circ}$C)}, 
+            xmin=0.05, xmax=0.95, 
+            ymin=30, ymax=100, 
+            xtick={0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9}, 
+            ytick={30,40,50,60,70,80,90,100}, 
+            legend pos=north west, 
+            grid=major, 
+            grid style={dashed, gray!40}, 
+            tick label style={font=\small}, 
+            label style={font=\small}, 
+            legend style={font=\small}, 
+        ] 
+ 
+        \addplot[ 
+            color=blue, 
+            mark=square*, 
+            thick, 
+        ] coordinates { 
+            (0.1, 35.19) 
+            (0.2, 36.25) 
+            (0.3, 38.06) 
+            (0.4, 40.94) 
+            (0.5, 44.19) 
+            (0.6, 48.13) 
+            (0.7, 53.06) 
+            (0.8, 62.06) 
+            (0.9, 70.25) 
+        }; 
+        \addlegendentry{DS18B20} 
+ 
+        \addplot[ 
+            color=red, 
+            mark=*, 
+            thick, 
+            dashed, 
+        ] coordinates { 
+            (0.1, 38.5) 
+            (0.2, 41.4) 
+            (0.3, 45.1) 
+            (0.4, 49.3) 
+            (0.5, 53.9) 
+            (0.6, 60.5) 
+            (0.7, 67.8) 
+            (0.8, 80.6) 
+            (0.9, 93.2) 
+        }; 
+        \addlegendentry{Mult\'imetro (refer\^encia)} 
+ 
+        \end{axis} 
+    \end{tikzpicture} 
+    \caption{Comparação entre as leituras do DS18B20 e do multímetro de referência em 
+função da amperagem aplicada.} 
+    \label{fig:curvas_temp} 
+\end{figure} 
+ 
+Observa-se que o DS18B20 apresenta leituras sistematicamente inferiores às do multímetro 
+de referência em toda a faixa ensaiada, com desvio crescente em função da temperatura. 
+Esse comportamento sugere a necessidade de avaliação do posicionamento físico do 
+sensor em relação ao ponto de medição, bem como eventual correção por offset ou curva 
+de calibração, a ser investigada nas próximas etapas do projeto. 
+ 
+% ------------------------------------------------------- 
+% GRÁFICO MMQ 
+% ------------------------------------------------------- 
+\subsubsection*{Linearização por Mínimos Quadrados} 
+ 
+A fim de corrigir o desvio sistemático observado entre as leituras do DS18B20 e do 
+multímetro de referência, aplicou-se o Método dos Mínimos Quadrados (MMQ) para obter 
+uma equação de calibração linear da forma: 
+ 
+\begin{equation} 
+    T_{\text{ref}} = a \cdot T_{\text{DS18B20}} + b 
+    \label{eq:mmq} 
+\end{equation} 
+ 
+\noindent onde $T_{\text{ref}}$ é a temperatura corrigida (estimativa da leitura do 
+multímetro) e $T_{\text{DS18B20}}$ é a leitura bruta do sensor. Os coeficientes foram 
+calculados pelas expressões: 
+ 
+\begin{equation} 
+    a = \frac{n\sum x_i y_i - \sum x_i \sum y_i}{n\sum x_i^2 - \left(\sum x_i\right)^2}, \qquad 
+    b = \frac{\sum y_i - a\sum x_i}{n} 
+\end{equation} 
+ 
+\noindent resultando em $a = 1{,}5267$ e $b = -13{,}7011$, com coeficiente de 
+determinação $R^2 = 0{,}9985$, o que indica excelente ajuste linear entre as duas 
+grandezas. A Figura~\ref{fig:mmq} apresenta o diagrama de dispersão (DS18B20 \textit{vs.} 
+multímetro) e a reta de regressão obtida pelo MMQ. 
+ 
+\begin{figure}[h] 
+    \centering 
+    \begin{tikzpicture} 
+        \begin{axis}[ 
+            width=13cm, 
+            height=9cm, 
+            xlabel={Leitura DS18B20 ($^{\circ}$C)}, 
+            ylabel={Leitura Mult\'imetro ($^{\circ}$C)}, 
+            xmin=33, xmax=73, 
+            ymin=35, ymax=98, 
+            xtick={35,40,45,50,55,60,65,70}, 
+            ytick={40,50,60,70,80,90}, 
+            legend pos=north west, 
+            grid=major, 
+            grid style={dashed, gray!40}, 
+            tick label style={font=\small}, 
+            label style={font=\small}, 
+            legend style={font=\small}, 
+        ] 
+ 
+        % Pontos experimentais 
+        \addplot[ 
+            only marks, 
+            color=blue, 
+            mark=square*, 
+            mark size=2.5pt, 
+        ] coordinates { 
+            (35.19, 38.5) 
+            (36.25, 41.4) 
+            (38.06, 45.1) 
+            (40.94, 49.3) 
+            (44.19, 53.9) 
+            (48.13, 60.5) 
+            (53.06, 67.8) 
+            (62.06, 80.6) 
+            (70.25, 93.2) 
+        }; 
+        \addlegendentry{Dados experimentais} 
+ 
+        % Reta MMQ: T_ref = 1,5267 * T_DS18B20 - 13,7011 
+        \addplot[ 
+            color=red, 
+            thick, 
+            domain=33:73, 
+            samples=2, 
+        ] {1.526662*x - 13.7011}; 
+        \addlegendentry{Reta MMQ: $T_{\text{ref}} = 1{,}5267\,T - 13{,}7011$} 
+ 
+        % Anotação R² 
+        \node[font=\small, anchor=south west] at (axis cs:34, 88) 
+{$R^2 = 0{,}9985$}; 
+\end{axis} 
+\end{tikzpicture} 
+\caption{Diagrama de dispersão das leituras do DS18B20 \textit{versus} multímetro de 
+referência e reta de regressão linear obtida pelo MMQ. O alto valor de $R^2$ confirma a 
+linearidade do comportamento do sensor na faixa ensaiada.} 
+\label{fig:mmq} 
+\end{figure} 
+A equação de calibração~\eqref{eq:mmq} pode ser aplicada diretamente no firmware para 
+corrigir em tempo real as leituras do DS18B20, convertendo-as para valores compatíveis 
+com o multímetro de referência sem necessidade de hardware adicional. 
+
+% ------------------------------------------------------- 
+% TAXA DE AMOSTRAGEM 
+% ------------------------------------------------------- 
+\subsection{Taxa de amostragem} 
+
+Em resolução de 12 bits, o tempo de conversão do DS18B20 é de
+até 750 ms, conforme especificação do fabricante. Os ensaios realizados confirmaram tempos de conversão entre 634 ms e 638 ms, demonstrando conformidade com a documentação técnica. O intervalo entre leituras consecutivas foi estabelecido em aproximadamente 1,6 s, incluindo o tempo de processamento e comunicação.
+
+\par A adequação dessa taxa de amostragem ao monitoramento de temperatura em sistemas hidropônicos fundamenta-se em duas características principais: (i) a dinâmica lenta de variação térmica em ambientes de cultivo controlado, e (ii) a faixa operacional típica do sistema (18 a 25 °C), que apresenta variações graduais sob condições normais de operação. Em sistemas hidropônicos, mudanças abruptas de temperatura são raras na ausência de falhas mecânicas ou perdas significativas de controle ambiental. Dessa forma, um período de amostragem de 1,6 s garante a captura adequada de transientes térmicos relevantes, fornecendo resolução temporal suficiente para detectar anomalias antes que comprometam o crescimento das plantas.
+
+\par Considerando que a resolução de 12 bits oferece sensibilidade de 0,0625 °C por bit, a combinação entre precisão espacial e taxa temporal proposta permite monitoramento confiável da temperatura sem introduzir latência excessiva na detecção de desvios operacionais.
+
+\section{Sensor de pH PH4502C: Caracterização e Aquisição de Sinal}
+
+\subsection{Caracterização do sensor}
+
+O PH4502C é um módulo sensor de pH analógico fabricado pela DIYMORE, projetado para medir a acidez ou alcalinidade de soluções na faixa de 0 a 14 pH. O módulo é alimentado por tensão de 5 V ± 0,2 V com consumo de corrente entre 5 e 10 mA, fornecendo uma saída de tensão analógica que varia linearmente com o pH da solução. Seu tempo de resposta é de até 5 s e tempo de estabilização de até 60 s, conforme especificação do fabricante. O sensor é equipado com eletrodo de vidro compatível com conector BNC e possui potenciômetro onboard para calibração.
+
+\par A calibração do PH4502C foi realizada utilizando três soluções de referência: água deionizada (pH neutro ~7), hidróxido de potássio (pH alcalino ~12) e água oxigenada (pH ácido ~4). Os ensaios de calibração revelaram que a tensão do sensor sobe à medida que o pH da solução diminui.
+
+\par Considerando que o sistema hidropônico opera na faixa controlada de 5,5 a 6,5 pH, o PH4502C demonstra ser adequado ao monitoramento, pois oferece sensibilidade suficiente nessa estreita faixa operacional. O intervalo de amostragem definido em 1,6 s, idêntico ao adotado para temperatura, garante sincronismo nas medições dual de ambos os parâmetros críticos da solução nutritiva, permitindo uma visão integrada do estado hidropônico sem introduzir latência excessiva na detecção de anomalias de pH que possam comprometer a nutrição das plantas.
+
+Fazendo a mesma linearização por mínimos quadrados feita na equação (2), chega-se em coeficientes a = -0,116 e b = 5,1661. Assim, chega-se na seguinte relação:
+
+\begin{figure}[h]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+            xlabel={pH},
+            ylabel={Tensão (V)},
+            grid=major,
+            legend pos=outer north east,
+            width=14cm,
+            height=10cm,
+            xmin=3, xmax=15,
+            ymin=3.4, ymax=4.9
+        ]
+        
+        % Dados de calibração (6 pontos)
+        \addplot[only marks, mark=*, mark size=3pt, fill=cyan!60, draw=none]
+        table {
+            pH  Tensao
+            4.29    4.74
+            5.0     4.69
+            6.2     4.23
+            11.88   3.78
+            12.26   3.79
+            14.22   3.52
+        };
+        
+        % Reta de tendência: Tensão = -0,116 * pH + 5,1661
+        \addplot[line width=1.5pt, red!70, dashed]
+        coordinates {
+            (3, 4.62)
+            (15, 3.31)
+        };
+        
+        \legend{Pontos de calibração, Reta de tendência}
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Relação entre pH e tensão de saída do sensor PH4502C após calibração com soluções tampão. A reta representa o ajuste linear obtido por mínimos quadrados: $V = -0,116 \times pH + 5,1661$.}
+    \label{fig:ph_tensao}
+\end{figure}
+
+\begin{table}[h]
+    \centering
+    \begin{tabular}{cc}
+        \hline
+        \textbf{pH} & \textbf{Tensão (V)} \\
+        \hline
+        4,29 & 4,74 \\
+        5,00 & 4,69 \\
+        6,20 & 4,23 \\
+        11,88 & 3,78 \\
+        12,26 & 3,79 \\
+        14,22 & 3,52 \\
+        \hline
+    \end{tabular}
+    \caption{Dados de calibração do sensor PH4502C com soluções de referência.}
+    \label{tab:ph_calibracao}
+\end{table}
+
+\subsection{Taxa de amostragem}
+
+O PH4502C apresenta tempo de resposta de até 5 s e tempo de estabilização de até 60 s, conforme especificação do fabricante. O intervalo de amostragem foi estabelecido em 1,6 s, idêntico ao da temperatura. Embora o sensor necessite até 60 s para estabilização completa, a amostragem a cada 1,6 s é adequada ao monitoramento de pH em sistemas hidropônicos pela natureza química da solução nutritiva, que apresenta variação lenta de pH sob condições normais de operação. Na faixa operacional do sistema (5,5 a 6,5 pH), mudanças abruptas são raras e ocorrem predominantemente por erros de dosagem ou falha no sistema de controle. Dessa forma, a taxa de 1,6 s garante sincronismo entre as medições de temperatura e pH, permitindo correlação entre esses parâmetros críticos sem introduzir latência excessiva na detecção de anomalias que possam comprometer a nutrição das plantas.
+
+\subsection{Circuito de Condicionamento}
+
+O circuito de condicionamento é pré-fabricado e está em conjunto com o sensor na embalagem, sendo uma placa eletrônica capaz de amplificar os sinais do eletrodo de pH e fazer a integração com o microcontrolador, contendo amplificadores operacionais para amplificação do sinal, dois trimpots (potenciômetros ajustáveis) de regulagem e um termistor para compensação de temperatura. Na placa, há um sensor de temperatura LM35 na borda próxima ao conector de 3 pinos e um transistor TL431A entre os potenciômetros.
+
+\par A arquitetura do condicionamento é estruturada em dois estágios: amplificação e ajuste de offset. O circuito realiza amplificação do sinal de baixa amplitude, filtragem para remoção de ruídos e ajuste de offset e ganho, linearizando o sinal para a faixa de 0 V a 5 V compatível com o microcontrolador. O potenciômetro próximo ao conector BNC é utilizado para calibração de offset, onde o ponto neutro é configurado para 7 pH correspondente a 2,5 V de saída analógica. O segundo potenciômetro ajusta o limite de pH 
+digital (pino Do) em 3,3 V.
+
+\begin{figure}[h]
+    \centering
+    \begin{circuitikz}[scale=1.3, line width=1pt]
+        
+        % ===== ENTRADA =====
+        \draw (0, 8) node[anchor=east, font=\small] {BNC} -- (1, 8);
+        
+        % ===== ESTÁGIO 1: AMPLIFICADOR =====
+        \draw (1, 8) to[short] (2, 8);
+        \draw (2, 8) to[amp, l=$A_1$] (4, 8);
+        \draw (4, 8) to[short] (5, 8);
+        
+        % Realimentação estágio 1
+        \draw (5, 8) to[short] (5, 7);
+        \draw (5, 7) to[R, l=$P_1$] (5, 6);
+        \draw (5, 6) to[short] (2, 6);
+        \draw (2, 6) to[short] (2, 7.5);
+        
+        % ===== ESTÁGIO 2: AMPLIFICADOR =====
+        \draw (5, 8) to[short] (6, 8);
+        \draw (6, 8) to[amp, l=$A_2$] (8, 8);
+        \draw (8, 8) to[short] (9, 8);
+        
+        % Realimentação estágio 2
+        \draw (9, 8) to[short] (9, 7);
+        \draw (9, 7) to[R, l=$P_2$] (9, 6);
+        \draw (9, 6) to[short] (6, 6);
+        \draw (6, 6) to[short] (6, 7.5);
+        
+        % ===== FILTRO RC =====
+        \draw (9, 8) to[short] (10, 8);
+        \draw (10, 8) to[R, l=$R_f$] (11, 8);
+        \draw (11, 8) to[C, l=$C_f$] (11, 6);
+        
+        % Ground
+        \draw (11, 6) to[short] (0, 6);
+        \draw (0, 6) node[ground] {};
+        
+        % ===== SAÍDA =====
+        \draw (11, 8) to[short] (12, 8);
+        \draw (12, 8) -- (13, 8);
+        \node at (13.5, 8) [draw, rectangle, anchor=west, font=\small] {Po};
+        
+        % ===== SENSOR LM35 =====
+        \draw (3, 4) to[Do, l=$LM35$] (3, 3);
+        \draw (3, 3) node[ground] {};
+        \node at (3.8, 3.5) [font=\tiny] {$T_o$};
+        
+    \end{circuitikz}
+    \caption{Circuito de condicionamento do PH4502C: dois estágios amplificadores com potenciômetros de offset (P1) e ganho (P2), filtro passa-baixas RC e saída analógica Po.}
+    \label{fig:circuito_ph4502c}
+\end{figure}
+
+\section{Implementação do Software de Monitoramento}
+
+O firmware desenvolvido para o ESP32 integra três funcionalidades críticas: aquisição de dados dos sensores pH e temperatura, processamento em tempo real com verificação de limites operacionais, e transmissão de alertas via Telegram. A arquitetura segue uma abordagem modular com funções especializadas para cada etapa.
+
+A inicialização (função \texttt{setup()}) estabelece comunicação serial a 115200 baud, conecta o microcontrolador à rede WiFi local e inicializa a biblioteca OneWire para o sensor DS18B20. Uma mensagem inicial é enviada ao Telegram confirmando que o sistema está operacional.
+
+A leitura do sensor pH (função \texttt{readVoltage()}) implementa filtragem por média móvel, coletando 20 amostras com intervalo de 5 ms entre elas. O valor médio do conversor analógico-digital (ADC) de 10 bits é convertido para tensão mediante a relação:
+
+\begin{equation}
+V = \frac{\text{ADC} \times 3{,}3}{4095}
+\end{equation}
+
+\noindent onde $3{,}3\,\text{V}$ é a tensão de referência interna do ESP32. A conversão de tensão para pH utiliza a equação de calibração obtida no laboratório:
+
+\begin{equation}
+\text{pH} = 7{,}0 + (V_{\text{ref}} - V) \times \text{escala} + \text{offset}
+\end{equation}
+
+\noindent onde $V_{\text{ref}} = 2{,}27\,\text{V}$ corresponde ao ponto neutro (pH 7) calibrado experimentalmente, a escala (ganho) de $5{,}7$ relaciona a variação de tensão à mudança de pH, e o offset de $-0{,}7$ compensa desvios sistemáticos.
+
+A aquisição de temperatura segue o protocolo 1-Wire através da biblioteca DallasTemperature, que comunica com o DS18B20 e retorna a leitura em graus Celsius com resolução de $0{,}0625\,^{\circ}\text{C}$ (12 bits).
+
+O sistema implementa um mecanismo de alertas inteligente na função \texttt{checkAlerts()}. Os limites operacionais do sistema hidropônico foram definidos em pH de $5{,}5$ a $6{,}5$ e temperatura de $18\,^{\circ}\text{C}$ a $28\,^{\circ}\text{C}$. Quando qualquer parâmetro ultrapassa esses limites, uma mensagem de alerta é enviada uma única vez (controlada pela flag \texttt{alertSent}), evitando spam de notificações. Quando os parâmetros retornam à normalidade, o sistema reseta a flag e fica pronto para detectar novos eventos.
+
+A transmissão de dados para Telegram ocorre a cada 10 segundos (intervalo configurável), com o envio de mensagens de status contendo os valores atuais de pH e temperatura. A comunicação utiliza protocolo HTTPS seguro, implementado através da classe \texttt{WiFiClientSecure}, que permite acesso à API do Telegram sem validação de certificado SSL (modo simplificado adequado para aplicações embarcadas). As mensagens são codificadas em formato URL antes do envio, com caracteres especiais convertidos para seus equivalentes hexadecimais.
+
+\begin{lstlisting}[style=arduino, caption={Firmware de monitoramento hidropônico com alertas via Telegram (ESP32/C++)}, label={lst:firmware_hidroponia}, fontsize=\footnotesize]
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+// ================= WIFI =================
+const char* ssid = "";
+const char* password = "";
+
+// ================= TELEGRAM =================
+String botToken = "";
+String chatID = "6148205976";
+
+// ================= pH =================
+#define PH_PIN 4
+float Vref = 2.27;
+float scale = 5.7;
+float offset = -0.7;
+
+// ================= TEMPERATURA =================
+#define ONE_WIRE_BUS 5
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&oneWire);
+
+// ================= TIMERS =================
+unsigned long lastSend = 0;
+const long sendInterval = 10000;
+
+// ================= LIMITES HIDROPONIA =================
+float PH_MIN = 5.5;
+float PH_MAX = 6.5;
+float TEMP_MIN = 18.0;
+float TEMP_MAX = 28.0;
+
+// ================= ALERTA =================
+bool alertSent = false;
+
+void setup() {
+  Serial.begin(115200);
+  WiFi.begin(ssid, password);
+  Serial.print("Conectando");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi conectado");
+  sensors.begin();
+  sendMessage("Sistema hidroponia iniciado");
+}
+
+void loop() {
+  float V = readVoltage();
+  float ph = 7.0 + (Vref - V) * scale + offset;
+  sensors.requestTemperatures();
+  float tempC = sensors.getTempCByIndex(0);
+  Serial.print("pH: ");
+  Serial.print(ph);
+  Serial.print(" | Temp: ");
+  Serial.println(tempC);
+  checkAlerts(ph, tempC);
+  if (millis() - lastSend > sendInterval) {
+    lastSend = millis();
+    sendStatus(ph, tempC);
+  }
+  delay(1000);
+}
+
+void sendStatus(float ph, float tempC) {
+  String msg = "STATUS HIDROPONIA\n";
+  msg += "pH: " + String(ph, 2) + "\n";
+  msg += "Temp: " + String(tempC, 1) + " C";
+  sendMessage(msg);
+}
+
+void checkAlerts(float ph, float tempC) {
+  bool phOut   = (ph < PH_MIN || ph > PH_MAX);
+  bool tempOut = (tempC < TEMP_MIN || tempC > TEMP_MAX);
+  if (phOut || tempOut) {
+    if (!alertSent) {
+      String msg = "ALERTA HIDROPONIA\n";
+      if (phOut)
+        msg += "pH fora da faixa!\n";
+      if (tempOut)
+        msg += "Temperatura fora da faixa!\n";
+      msg += "\npH: " + String(ph, 2);
+      msg += "\nTemp: " + String(tempC, 1) + " C";
+      sendMessage(msg);
+      alertSent = true;
+    }
+  } else {
+    alertSent = false;
+  }
+}
+
+float readVoltage() {
+  int sum = 0;
+  for (int i = 0; i < 20; i++) {
+    sum += analogRead(PH_PIN);
+    delay(5);
+  }
+  float adc = sum / 20.0;
+  return adc * (3.3 / 4095.0);
+}
+
+void sendMessage(String msg) {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi desconectado");
+    return;
+  }
+  msg.replace("\n", "%0A");
+  msg.replace(" ",  "+");
+  msg.replace("!",  "%21");
+  msg.replace(":",  "%3A");
+  String url = "https://api.telegram.org/bot";
+  url += botToken;
+  url += "/sendMessage?chat_id=";
+  url += chatID;
+  url += "&text=";
+  url += msg;
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  http.begin(client, url);
+  int code = http.GET();
+  http.end();
+  Serial.print("HTTP CODE: ");
+  Serial.println(code);
+}
+\end{lstlisting}
+
+
+\end{document} 
+ 
