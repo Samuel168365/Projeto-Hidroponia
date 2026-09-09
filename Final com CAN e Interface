@@ -16,7 +16,7 @@ String chatID = "6148205976";
 // ================= BACKEND (armazenamento historico) =================
 // Troque pelo endereco do seu backend depois que ele estiver rodando/hospedado.
 // Ex: "http://192.168.1.50:8000" (rede local) ou "https://seu-app.onrender.com"
-const char* backendHost = "http://192.168.5.10:8000";
+const char* backendHost = "http://192.168.5.6:8000";
 String backendURL = String(backendHost) + "/leituras";
 
 // ================= pH =================
