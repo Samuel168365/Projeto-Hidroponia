@@ -3,7 +3,7 @@
 
 // Wi-Fi
 const char* ssid = "aec10";
-const char* password = "4Tyv!/";
+const char* password = "";
 
 // Telegram
 String botToken = "";
